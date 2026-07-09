@@ -67,8 +67,17 @@ def test_department_fuzzy_match():
 
 def test_keywords_overlap_catches_abbreviation_style_catalog_keywords():
     role = _role(keywords=["analytics", "bi", "reporting"])
-    signals = SignalBundle(present_signals={"keywords"}, keyword_bag={"senior", "bi", "analyst"})
+    signals = SignalBundle(present_signals={"keywords"}, keyword_text="senior bi analyst")
     contributions = score_role(signals, None, False, False, role)
     kw_contrib = next(c for c in contributions if c.signal == "keywords")
     assert "bi" in kw_contrib.detail
     assert kw_contrib.score > 0
+
+
+def test_keywords_overlap_matches_multi_word_catalog_keywords():
+    role = _role(keywords=["engineering manager", "team lead", "people management"])
+    signals = SignalBundle(present_signals={"keywords"}, keyword_text="engineering manager for the platform team")
+    contributions = score_role(signals, None, False, False, role)
+    kw_contrib = next(c for c in contributions if c.signal == "keywords")
+    assert "engineering manager" in kw_contrib.detail
+    assert kw_contrib.score == 1 / 3

@@ -19,7 +19,9 @@ from app.pipeline.types import CatalogRole, SignalBundle, SignalContribution
 from app.pipeline.vocabulary import ROLE_SENIORITY_TO_LEVELS
 
 
-def _role_function(role: CatalogRole) -> str | None:
+def role_function(role: CatalogRole) -> str | None:
+    """Classifies a catalog role into the same function-hint vocabulary
+    used for groups/manager/notes signals, so they can be compared."""
     text = f"{role.department} {role.job_family} {' '.join(role.keywords)}".lower()
     return best_function_hint(text)
 
@@ -74,41 +76,40 @@ def _skills_contribution(skills: set[str], role: CatalogRole) -> SignalContribut
 
 
 def _groups_contribution(signals: SignalBundle, role: CatalogRole) -> SignalContribution:
-    role_function = _role_function(role)
-    matched = bool(role_function and role_function in signals.group_function_hints)
+    function = role_function(role)
+    matched = bool(function and function in signals.group_function_hints)
     if matched:
         score = 1.0
     elif signals.group_function_hints:
         score = 0.15  # groups present but none point at this role's function
     else:
         score = 0.0
-    detail = f"Group hints {sorted(signals.group_function_hints) or 'none'} vs role function '{role_function}'"
+    detail = f"Group hints {sorted(signals.group_function_hints) or 'none'} vs role function '{function}'"
     return SignalContribution(
         signal="groups", detail=detail, score=score, weight=settings.weight_groups, supports=matched
     )
 
 
 def _manager_contribution(signals: SignalBundle, role: CatalogRole) -> SignalContribution:
-    role_function = _role_function(role)
-    matched = bool(signals.manager_function_hint and signals.manager_function_hint == role_function)
+    function = role_function(role)
+    matched = bool(signals.manager_function_hint and signals.manager_function_hint == function)
     if matched:
         score = 1.0
     elif signals.manager_function_hint:
         score = 0.2
     else:
         score = 0.0
-    detail = f"Manager function hint '{signals.manager_function_hint}' vs role function '{role_function}'"
+    detail = f"Manager function hint '{signals.manager_function_hint}' vs role function '{function}'"
     return SignalContribution(
         signal="manager", detail=detail, score=score, weight=settings.weight_manager, supports=matched
     )
 
 
-def _keywords_contribution(keyword_bag: set[str], role: CatalogRole) -> SignalContribution | None:
+def _keywords_contribution(keyword_text: str, role: CatalogRole) -> SignalContribution | None:
     role_keywords = [k.lower() for k in role.keywords]
     if not role_keywords:
         return None
-    bag_text = " ".join(sorted(keyword_bag))
-    matched = [k for k in role_keywords if contains_phrase(bag_text, k)]
+    matched = [k for k in role_keywords if contains_phrase(keyword_text, k)]
     score = len(matched) / len(role_keywords)
     detail = f"Keyword overlap: {', '.join(matched) or 'none'} ({len(matched)}/{len(role_keywords)} of role's keywords)"
     return SignalContribution(
@@ -148,7 +149,7 @@ def score_role(
     if "manager" in signals.present_signals:
         contributions.append(_manager_contribution(signals, role))
     if "keywords" in signals.present_signals:
-        contribution = _keywords_contribution(signals.keyword_bag, role)
+        contribution = _keywords_contribution(signals.keyword_text, role)
         if contribution:
             contributions.append(contribution)
     if "seniority" in signals.present_signals:

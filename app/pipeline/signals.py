@@ -84,14 +84,16 @@ def extract_signals(profile: NormalizedProfile) -> SignalBundle:
     # text fields: the catalog's own `keywords` lists use abbreviations
     # (e.g. "bi"), which our expansion step (Sr -> Senior, BI -> Business
     # Intelligence) would otherwise erase from the bag entirely.
-    keyword_bag = _keyword_bag(
+    keyword_text_parts = [
         profile.title_normalized,
         clean_text(profile.title_raw),
         profile.department_normalized,
         clean_text(profile.department_raw),
         profile.notes_normalized,
         profile.manager_title_normalized,
-    )
+    ]
+    keyword_bag = _keyword_bag(*keyword_text_parts)
+    keyword_text = " ".join(part for part in keyword_text_parts if part)
 
     present: set[str] = set()
     if not profile.title_is_empty:
@@ -119,6 +121,7 @@ def extract_signals(profile: NormalizedProfile) -> SignalBundle:
         group_function_hints=group_hints,
         employment_type_hint=_employment_type_hint(profile.groups_normalized),
         keyword_bag=keyword_bag,
+        keyword_text=keyword_text,
         notes_function_hint=best_function_hint(profile.notes_normalized),
         location_normalized=profile.location_normalized,
         present_signals=present,
