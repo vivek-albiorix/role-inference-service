@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: role-inference-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Optional. Left unset, the LLM disambiguation stage falls back to a
+      # deterministic stub -- the service runs fully without it. Render
+      # prompts for this in the dashboard rather than storing it here
+      # (sync: false), so it's never committed to the repo.
+      - key: OPENAI_API_KEY
+        sync: false
+    # No persistent disk on the free plan: DATABASE_URL keeps its
+    # app/config.py default (a local sqlite file inside the container), so
+    # the catalog + sample users are re-seeded fresh on every deploy/restart
+    # via the Dockerfile's CMD (idempotent -- see scripts/seed.py). Add a
+    # Render disk mounted at /app and override DATABASE_URL to persist data
+    # across restarts on a paid plan.

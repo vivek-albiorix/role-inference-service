@@ -98,6 +98,33 @@ curl -s http://127.0.0.1:8000/api/users/usr_001/inference | python3 -m json.tool
 
 ---
 
+## Deployment (Render)
+
+`render.yaml` is a Blueprint Render reads automatically — it deploys the
+same multi-stage `Dockerfile` used locally, unmodified. To deploy:
+
+1. Push this repo to GitHub.
+2. In the Render dashboard: **New +** → **Blueprint** → select the repo.
+   Render detects `render.yaml`, builds the Docker image, and prompts for
+   `OPENAI_API_KEY` (optional — declared with `sync: false` so it's entered
+   in the dashboard, never committed to the repo).
+3. First boot runs `scripts/seed.py` (schema migration + sample-data seed)
+   before starting `uvicorn`, same as local Docker — no extra setup step.
+
+**Persistence on the free plan:** there's no persistent disk, so the
+SQLite file resets on every deploy/restart — the container just re-seeds
+the 10-role catalog and 8 sample users fresh each time (`scripts/seed.py`
+is idempotent either way). Fine for a demo/preview; for anything that needs
+to persist admin overrides or ingested profiles across restarts, add a
+Render Disk mounted into the container and point `DATABASE_URL` at a path
+inside it (paid plan feature).
+
+The `$PORT` Render injects at runtime is respected by both the
+`Dockerfile`'s `CMD` and its `HEALTHCHECK` (`${PORT:-8000}`, so nothing
+changes for local `docker compose up`, which never sets `$PORT`).
+
+---
+
 ## Architecture overview
 
 ```
@@ -207,6 +234,23 @@ with **zero page navigation** (tracked via a `beforeunload` listener that
 never fired), set and reset an override on usr_001 and confirmed the
 source badge flipped both ways, and exercised re-infer/reprocess-all — with
 zero browser console errors throughout.
+
+Ingest, Override, Details, and "New role" (see below) all open as modals
+(`Modal.vue` — Escape and backdrop-click both close it). Per-row actions
+(Details/Override/Reset/Re-infer) live behind a meatball (⋮) menu
+(`ActionsMenu.vue`) instead of four separate buttons competing for row
+space; clicking any menu item both performs the action and closes the menu.
+When a role is overridden with a `reason`, that reason renders directly in
+the row (quoted, under the source badge) — pulled through
+`EffectiveRoleOut.override_reason` in the API response, not fetched
+separately. Creating a new Work Architecture role is available from the
+header ("New role" → `POST /api/roles`). Unlike a user's `user_id` (a real
+external SSO identity, always required), a role's `role_id` is a purely
+internal catalog key with no meaning outside this system, so the form
+doesn't ask for one — the server generates the next sequential `role_NNN`
+(`services/catalog.py::create_role`). The new role is immediately
+selectable in every Override dropdown afterward without a page reload. All
+of this was re-verified live via Playwright, not just type-checked.
 
 ---
 
@@ -406,6 +450,7 @@ All routes are under `/api`. Interactive docs at `/docs`.
 | `DELETE /api/users/{id}/override` | Reset to inferred mode |
 | `GET /api/users/{id}/history` | Timeline of inference runs + overrides |
 | `GET /api/roles` | The Work Architecture catalog |
+| `POST /api/roles` | Admin-authored addition to the catalog; `role_id` is server-generated (sequential `role_NNN`, 409 only on a rare concurrent-request collision), not client-supplied; doesn't retroactively touch existing users' mappings |
 | `GET /api/audit` | Org-level audit log (optional `entity_type` filter) |
 | `POST /api/reprocess` | Bulk re-infer all users, respecting pinned overrides by default |
 

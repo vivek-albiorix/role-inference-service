@@ -210,10 +210,49 @@ tr.user-row:hover {
   color: var(--text-muted);
 }
 
-.actions-cell {
+.override-reason {
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 2px;
+  max-width: 220px;
+}
+
+.actions-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.meatball-btn {
+  padding: 4px 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.actions-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  min-width: 150px;
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.actions-dropdown button {
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--panel);
+}
+
+.actions-dropdown button:hover {
+  background: #f0f1f3;
 }
 
 .detail-content {

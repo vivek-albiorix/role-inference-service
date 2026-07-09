@@ -175,3 +175,54 @@ def test_audit_log_records_override_and_inference_actions(client):
     actions = [entry["action"] for entry in audit]
     assert "inference.completed" in actions
     assert "override.created" in actions
+
+
+def test_create_role_auto_generates_role_id_and_adds_to_catalog(client):
+    payload = {
+        "role_name": "Staff Engineer",
+        "department": "Engineering",
+        "job_family": "Engineering",
+        "seniority": "Staff",
+        "skills": ["Architecture", "Mentorship"],
+        "keywords": ["staff", "principal", "technical leadership"],
+    }
+    response = client.post("/api/roles", json=payload)
+    assert response.status_code == 201
+    # Seed catalog is role_001..role_010, so the first admin-created role
+    # continues that numbering rather than a client-supplied id.
+    assert response.json()["role_id"] == "role_011"
+
+    roles = client.get("/api/roles").json()
+    assert len(roles) == 11
+    assert any(r["role_id"] == "role_011" for r in roles)
+
+    audit = client.get("/api/audit").json()
+    assert any(entry["action"] == "role.created" and entry["entity_id"] == "role_011" for entry in audit)
+
+
+def test_create_role_ids_are_sequential_across_multiple_creates(client):
+    first = client.post(
+        "/api/roles",
+        json={"role_name": "Role A", "department": "Data", "job_family": "Analytics", "seniority": "Mid"},
+    )
+    second = client.post(
+        "/api/roles",
+        json={"role_name": "Role B", "department": "Data", "job_family": "Analytics", "seniority": "Mid"},
+    )
+    assert first.json()["role_id"] == "role_011"
+    assert second.json()["role_id"] == "role_012"
+
+
+def test_override_reason_surfaces_on_effective_role(client):
+    client.post("/api/profiles", json=SARAH_PAYLOAD)
+    client.patch(
+        "/api/users/usr_001/override",
+        json={"role_id": "role_002", "created_by": "admin", "reason": "Acting generalist this quarter"},
+    )
+    detail = client.get("/api/users/usr_001").json()
+    assert detail["effective_role"]["override_reason"] == "Acting generalist this quarter"
+
+    # Reset clears it back to inferred, where override_reason has no meaning.
+    client.delete("/api/users/usr_001/override")
+    detail_after_reset = client.get("/api/users/usr_001").json()
+    assert detail_after_reset["effective_role"]["override_reason"] is None

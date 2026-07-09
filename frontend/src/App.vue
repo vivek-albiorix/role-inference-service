@@ -4,6 +4,7 @@ import { api } from './api'
 import type { UserSummaryOut, RoleOut } from './types'
 import UserTable from './components/UserTable.vue'
 import IngestForm from './components/IngestForm.vue'
+import NewRoleForm from './components/NewRoleForm.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import Modal from './components/Modal.vue'
 import { useToast } from './composables/useToast'
@@ -13,6 +14,7 @@ const roles = ref<RoleOut[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 const showIngest = ref(false)
+const showNewRole = ref(false)
 const { showToast } = useToast()
 
 async function loadUsers() {
@@ -38,6 +40,11 @@ async function onIngested() {
   await loadUsers()
 }
 
+async function onRoleCreated() {
+  showNewRole.value = false
+  roles.value = await api.getRoles()
+}
+
 async function onReprocessAll() {
   try {
     const result = await api.reprocessAll()
@@ -58,17 +65,22 @@ onMounted(() => {
   <header>
     <div>
       <h1>Role Inference Admin</h1>
-      <p>Data model &amp; system behavior demo &mdash; not a polished UI by design.</p>
+      <p>Data model &amp; system behavior</p>
     </div>
     <div class="header-actions">
       <button @click="showIngest = true">Ingest new profile</button>
+      <button @click="showNewRole = true">New role</button>
       <button @click="onReprocessAll">Reprocess all</button>
       <a href="/docs" target="_blank" rel="noopener"><button type="button">API docs</button></a>
     </div>
   </header>
 
-  <Modal v-if="showIngest" title="Ingest an SSO profile" @close="showIngest = false">
+  <Modal v-if="showIngest" title="Ingest a profile" @close="showIngest = false">
     <IngestForm @ingested="onIngested" />
+  </Modal>
+
+  <Modal v-if="showNewRole" title="Create a new role" @close="showNewRole = false">
+    <NewRoleForm @created="onRoleCreated" />
   </Modal>
 
   <main>
@@ -79,13 +91,12 @@ onMounted(() => {
           <th>Title / Department</th>
           <th>Effective role</th>
           <th>Confidence</th>
-          <th></th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td colspan="6" class="empty-state">
+          <td colspan="5" class="empty-state">
             <span v-if="loading">Loading&hellip;</span>
             <span v-else-if="loadError">Failed to load users: {{ loadError }}</span>
             <span v-else>No users yet. Ingest a profile to get started.</span>

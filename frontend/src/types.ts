@@ -34,6 +34,15 @@ export interface RoleOut {
   keywords: string[]
 }
 
+export interface RoleIn {
+  role_name: string
+  department: string
+  job_family: string
+  seniority: string
+  skills?: string[]
+  keywords?: string[]
+}
+
 export interface SignalEvidence {
   signal: string
   value: unknown
@@ -78,6 +87,7 @@ export interface EffectiveRoleOut {
   source: 'inferred' | 'overridden'
   confidence: number | null
   band: string | null
+  override_reason: string | null
 }
 
 export interface UserSummaryOut {

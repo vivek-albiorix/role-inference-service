@@ -66,6 +66,22 @@ class RoleOut(BaseModel):
     keywords: list[str]
 
 
+class RoleIn(BaseModel):
+    """Admin-authored addition to the Work Architecture catalog. Unlike a
+    user's `user_id` (a real external SSO identity that must be supplied,
+    never invented), `role_id` is a purely internal catalog key with no
+    meaning outside this system -- so the server generates it (see
+    services/catalog.py::create_role) instead of asking the admin to pick
+    one and risk a typo'd collision."""
+
+    role_name: str = Field(min_length=1)
+    department: str = Field(min_length=1)
+    job_family: str = Field(min_length=1)
+    seniority: str = Field(min_length=1)
+    skills: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+
+
 # --------------------------------------------------------------------------
 # Inference result / explanation
 # --------------------------------------------------------------------------
@@ -129,6 +145,7 @@ class EffectiveRoleOut(BaseModel):
     source: Literal["inferred", "overridden"]
     confidence: float | None
     band: str | None = None
+    override_reason: str | None = None
 
 
 class UserSummaryOut(BaseModel):

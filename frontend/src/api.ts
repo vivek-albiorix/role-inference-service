@@ -4,6 +4,7 @@ import type {
   OverrideOut,
   ProfileIngestedOut,
   ReprocessResultOut,
+  RoleIn,
   RoleOut,
   SSOProfileIn,
   UserSummaryOut,
@@ -35,6 +36,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   getUsers: () => request<UserSummaryOut[]>('/users'),
   getRoles: () => request<RoleOut[]>('/roles'),
+  createRole: (payload: RoleIn) => request<RoleOut>('/roles', { method: 'POST', body: JSON.stringify(payload) }),
   getInference: (userId: string) => request<InferenceResultOut>(`/users/${encodeURIComponent(userId)}/inference`),
 
   setOverride: (userId: string, payload: OverrideIn) =>

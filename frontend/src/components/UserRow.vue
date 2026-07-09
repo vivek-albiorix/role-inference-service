@@ -6,6 +6,7 @@ import { useToast } from '../composables/useToast'
 import InferenceDetail from './InferenceDetail.vue'
 import OverrideForm from './OverrideForm.vue'
 import Modal from './Modal.vue'
+import ActionsMenu from './ActionsMenu.vue'
 
 const props = defineProps<{ user: UserSummaryOut; roles: RoleOut[] }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -81,6 +82,9 @@ async function onReinfer() {
       <br />
       <span class="badge" :class="`source-${user.effective_role.source}`">{{ user.effective_role.source }}</span>
       <span v-if="user.override_pinned" class="badge pinned">pinned</span>
+      <div v-if="user.effective_role.override_reason" class="muted override-reason">
+        &ldquo;{{ user.effective_role.override_reason }}&rdquo;
+      </div>
     </td>
     <td>
       {{ user.effective_role.confidence != null ? user.effective_role.confidence.toFixed(2) : '—' }}
@@ -88,11 +92,13 @@ async function onReinfer() {
         {{ user.effective_role.band.replace('_', ' ') }}
       </span>
     </td>
-    <td><button @click="toggleDetails">Details</button></td>
-    <td class="actions-cell">
-      <button @click="openOverrideForm">Override</button>
-      <button :disabled="!user.override_active" @click="onReset">Reset</button>
-      <button @click="onReinfer">Re-infer</button>
+    <td>
+      <ActionsMenu>
+        <button type="button" @click="toggleDetails">Details</button>
+        <button type="button" @click="openOverrideForm">Override</button>
+        <button type="button" :disabled="!user.override_active" @click="onReset">Reset</button>
+        <button type="button" @click="onReinfer">Re-infer</button>
+      </ActionsMenu>
     </td>
   </tr>
 

@@ -14,7 +14,6 @@ defineEmits<{ changed: [] }>()
         <th>Title / Department</th>
         <th>Effective role</th>
         <th>Confidence</th>
-        <th></th>
         <th>Actions</th>
       </tr>
     </thead>

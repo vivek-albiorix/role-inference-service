@@ -14,10 +14,20 @@ from app.models.tables import InferenceRun, Mapping, Override, Profile, Role, Us
 from app.pipeline.confidence import band_for
 
 
-def _effective_role_out(session: Session, mapping: Mapping | None) -> EffectiveRoleOut:
+def _effective_role_out(
+    session: Session, mapping: Mapping | None, active_override: Override | None
+) -> EffectiveRoleOut:
+    override_reason = active_override.reason if active_override else None
     if mapping is None or mapping.effective_role_id is None:
         source = mapping.source if mapping else "inferred"
-        return EffectiveRoleOut(role_id=None, role_name=None, source=source, confidence=None, band=None)
+        return EffectiveRoleOut(
+            role_id=None,
+            role_name=None,
+            source=source,
+            confidence=None,
+            band=None,
+            override_reason=override_reason if source == "overridden" else None,
+        )
 
     role = session.get(Role, mapping.effective_role_id)
     band = band_for(mapping.confidence) if mapping.source == "inferred" and mapping.confidence is not None else None
@@ -27,6 +37,7 @@ def _effective_role_out(session: Session, mapping: Mapping | None) -> EffectiveR
         source=mapping.source,
         confidence=mapping.confidence,
         band=band,
+        override_reason=override_reason if mapping.source == "overridden" else None,
     )
 
 
@@ -45,7 +56,7 @@ def build_user_summary(session: Session, user: User) -> UserSummaryOut:
         display_name=user.display_name,
         title=title,
         department=department,
-        effective_role=_effective_role_out(session, mapping),
+        effective_role=_effective_role_out(session, mapping, active_override),
         override_active=active_override is not None,
         override_pinned=bool(active_override and active_override.pinned),
     )
