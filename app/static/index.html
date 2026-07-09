@@ -1,5 +1,97 @@
 <!doctype html>
-<html>
-  <head><meta charset="utf-8"><title>Role Inference Admin</title></head>
-  <body>Placeholder — admin page implemented in a later commit.</body>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Role Inference Admin</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Role Inference Admin</h1>
+        <p>Data model &amp; system behavior demo &mdash; not a polished UI by design.</p>
+      </div>
+      <div class="header-actions">
+        <button id="toggle-ingest-btn">Ingest new profile</button>
+        <button id="reprocess-btn">Reprocess all</button>
+        <a href="/docs" target="_blank" rel="noopener"><button type="button">API docs</button></a>
+      </div>
+    </header>
+
+    <main>
+      <section id="ingest-panel" class="panel" hidden>
+        <div class="panel-header">Ingest an SSO profile</div>
+        <div class="panel-body">
+          <form id="ingest-form">
+            <div class="field-row">
+              <div class="field">
+                <label for="ingest-user-id">user_id *</label>
+                <input type="text" id="ingest-user-id" required placeholder="usr_009" />
+              </div>
+              <div class="field">
+                <label for="ingest-display-name">display_name</label>
+                <input type="text" id="ingest-display-name" placeholder="Jane Doe" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="ingest-title">title</label>
+                <input type="text" id="ingest-title" placeholder="Sr BI Analyst" />
+              </div>
+              <div class="field">
+                <label for="ingest-department">department</label>
+                <input type="text" id="ingest-department" placeholder="Data & Insights" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="ingest-manager-title">manager_title</label>
+                <input type="text" id="ingest-manager-title" placeholder="Director of Analytics" />
+              </div>
+              <div class="field">
+                <label for="ingest-location">location</label>
+                <input type="text" id="ingest-location" placeholder="New York" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="ingest-skills">skills (comma-separated)</label>
+                <input type="text" id="ingest-skills" placeholder="SQL, Python, Looker" />
+              </div>
+              <div class="field">
+                <label for="ingest-groups">groups (comma-separated)</label>
+                <input type="text" id="ingest-groups" placeholder="tableau-users, data-team" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="ingest-notes">notes</label>
+              <input type="text" id="ingest-notes" placeholder="Optional free text" />
+            </div>
+            <button type="submit" class="primary">Ingest &amp; infer</button>
+          </form>
+        </div>
+      </section>
+
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Title / Department</th>
+            <th>Effective role</th>
+            <th>Confidence</th>
+            <th></th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="6" class="empty-state">Loading&hellip;</td></tr>
+        </tbody>
+      </table>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="/app.js"></script>
+  </body>
 </html>
