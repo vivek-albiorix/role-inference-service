@@ -54,6 +54,26 @@ zero external dependencies out of the box. Add a key to `.env` to see the real
 LLM path (only exercised on the small fraction of profiles that are
 genuinely ambiguous — see below).
 
+### Or run with Docker
+
+```bash
+cp .env.example .env               # optional: add OPENAI_API_KEY
+docker compose up --build
+```
+
+Same **http://127.0.0.1:8000/**. The container runs `scripts/seed.py` on
+every start (schema migration + sample-data seeding — both idempotent, so a
+restart is a no-op past the first run) before starting `uvicorn`. The SQLite
+file lives in a named volume (`db-data`) so it survives `docker compose down`
+/ `up` cycles; `docker compose down -v` wipes it for a clean-slate rerun.
+Compose reads `.env` automatically for `OPENAI_API_KEY` substitution — same
+optional-key behavior as the bare-metal path above.
+
+> The Docker setup was written and reasoned through carefully but not
+> build-tested in the environment this was developed in (no Docker daemon
+> available there) — run `docker compose up --build` once yourself to confirm
+> before depending on it for a demo.
+
 Run the test suite (69 tests, all offline/hermetic):
 
 ```bash

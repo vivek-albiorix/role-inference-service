@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Absolute path into the named volume below, so the db survives
+      # container restarts/rebuilds -- overrides the relative-path default
+      # in app/config.py (sqlite:///./role_inference.db) that's used
+      # bare-metal.
+      DATABASE_URL: sqlite:////data/role_inference.db
+      # Read from a .env file in the repo root if present (Compose loads it
+      # automatically for ${...} substitution); no key is required -- the LLM
+      # disambiguation stage falls back to a deterministic stub without one.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    volumes:
+      - db-data:/data
+
+volumes:
+  db-data:
