@@ -5,6 +5,7 @@ import { api } from '../api'
 import { useToast } from '../composables/useToast'
 import InferenceDetail from './InferenceDetail.vue'
 import OverrideForm from './OverrideForm.vue'
+import Modal from './Modal.vue'
 
 const props = defineProps<{ user: UserSummaryOut; roles: RoleOut[] }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -94,22 +95,16 @@ async function onReinfer() {
       <button @click="onReinfer">Re-infer</button>
     </td>
   </tr>
-  <tr v-if="panel !== 'none'" class="detail-row">
-    <td colspan="6">
-      <div class="detail-content">
-        <template v-if="panel === 'detail'">
-          <p v-if="loadingInference">Loading&hellip;</p>
-          <p v-else-if="inferenceError" class="muted">No inference yet ({{ inferenceError }}).</p>
-          <InferenceDetail v-else-if="inference" :inference="inference" />
-        </template>
-        <OverrideForm
-          v-else-if="panel === 'override'"
-          :roles="roles"
-          :user-id="user.user_id"
-          @saved="onOverrideSaved"
-          @cancel="panel = 'none'"
-        />
-      </div>
-    </td>
-  </tr>
+
+  <Modal v-if="panel === 'detail'" :title="`Inference details — ${user.user_id}`" size="lg" @close="panel = 'none'">
+    <p v-if="loadingInference">Loading&hellip;</p>
+    <p v-else-if="inferenceError" class="muted">No inference yet ({{ inferenceError }}).</p>
+    <div v-else-if="inference" class="detail-content">
+      <InferenceDetail :inference="inference" />
+    </div>
+  </Modal>
+
+  <Modal v-if="panel === 'override'" :title="`Set override — ${user.user_id}`" @close="panel = 'none'">
+    <OverrideForm :roles="roles" :user-id="user.user_id" @saved="onOverrideSaved" @cancel="panel = 'none'" />
+  </Modal>
 </template>

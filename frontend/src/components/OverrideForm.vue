@@ -31,7 +31,6 @@ async function onSubmit() {
 
 <template>
   <form class="override-form" @submit.prevent="onSubmit">
-    <h4>Set override</h4>
     <div class="field-row">
       <div class="field">
         <label>Role</label>

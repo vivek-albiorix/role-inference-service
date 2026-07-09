@@ -5,6 +5,7 @@ import type { UserSummaryOut, RoleOut } from './types'
 import UserTable from './components/UserTable.vue'
 import IngestForm from './components/IngestForm.vue'
 import ToastContainer from './components/ToastContainer.vue'
+import Modal from './components/Modal.vue'
 import { useToast } from './composables/useToast'
 
 const users = ref<UserSummaryOut[]>([])
@@ -60,15 +61,17 @@ onMounted(() => {
       <p>Data model &amp; system behavior demo &mdash; not a polished UI by design.</p>
     </div>
     <div class="header-actions">
-      <button @click="showIngest = !showIngest">{{ showIngest ? 'Close' : 'Ingest new profile' }}</button>
+      <button @click="showIngest = true">Ingest new profile</button>
       <button @click="onReprocessAll">Reprocess all</button>
       <a href="/docs" target="_blank" rel="noopener"><button type="button">API docs</button></a>
     </div>
   </header>
 
-  <main>
-    <IngestForm v-if="showIngest" @ingested="onIngested" />
+  <Modal v-if="showIngest" title="Ingest an SSO profile" @close="showIngest = false">
+    <IngestForm @ingested="onIngested" />
+  </Modal>
 
+  <main>
     <table v-if="loading || loadError || users.length === 0">
       <thead>
         <tr>

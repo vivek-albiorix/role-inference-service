@@ -63,61 +63,56 @@ async function onSubmit() {
 </script>
 
 <template>
-  <section class="panel">
-    <div class="panel-header">Ingest an SSO profile</div>
-    <div class="panel-body">
-      <form @submit.prevent="onSubmit">
-        <div class="field-row">
-          <div class="field">
-            <label for="ingest-user-id">user_id *</label>
-            <input id="ingest-user-id" v-model="form.user_id" type="text" required placeholder="usr_009" />
-          </div>
-          <div class="field">
-            <label for="ingest-display-name">display_name</label>
-            <input id="ingest-display-name" v-model="form.display_name" type="text" placeholder="Jane Doe" />
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="ingest-title">title</label>
-            <input id="ingest-title" v-model="form.title" type="text" placeholder="Sr BI Analyst" />
-          </div>
-          <div class="field">
-            <label for="ingest-department">department</label>
-            <input id="ingest-department" v-model="form.department" type="text" placeholder="Data & Insights" />
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="ingest-manager-title">manager_title</label>
-            <input
-              id="ingest-manager-title"
-              v-model="form.manager_title"
-              type="text"
-              placeholder="Director of Analytics"
-            />
-          </div>
-          <div class="field">
-            <label for="ingest-location">location</label>
-            <input id="ingest-location" v-model="form.location" type="text" placeholder="New York" />
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="ingest-skills">skills (comma-separated)</label>
-            <input id="ingest-skills" v-model="form.skills" type="text" placeholder="SQL, Python, Looker" />
-          </div>
-          <div class="field">
-            <label for="ingest-groups">groups (comma-separated)</label>
-            <input id="ingest-groups" v-model="form.groups" type="text" placeholder="tableau-users, data-team" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="ingest-notes">notes</label>
-          <input id="ingest-notes" v-model="form.notes" type="text" placeholder="Optional free text" />
-        </div>
-        <button type="submit" class="primary">Ingest &amp; infer</button>
-      </form>
+  <form @submit.prevent="onSubmit">
+    <div class="field-row">
+      <div class="field">
+        <label for="ingest-user-id">user_id *</label>
+        <input id="ingest-user-id" v-model="form.user_id" type="text" required placeholder="usr_009" />
+      </div>
+      <div class="field">
+        <label for="ingest-display-name">display_name</label>
+        <input id="ingest-display-name" v-model="form.display_name" type="text" placeholder="Jane Doe" />
+      </div>
     </div>
-  </section>
+    <div class="field-row">
+      <div class="field">
+        <label for="ingest-title">title</label>
+        <input id="ingest-title" v-model="form.title" type="text" placeholder="Sr BI Analyst" />
+      </div>
+      <div class="field">
+        <label for="ingest-department">department</label>
+        <input id="ingest-department" v-model="form.department" type="text" placeholder="Data & Insights" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="ingest-manager-title">manager_title</label>
+        <input
+          id="ingest-manager-title"
+          v-model="form.manager_title"
+          type="text"
+          placeholder="Director of Analytics"
+        />
+      </div>
+      <div class="field">
+        <label for="ingest-location">location</label>
+        <input id="ingest-location" v-model="form.location" type="text" placeholder="New York" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="ingest-skills">skills (comma-separated)</label>
+        <input id="ingest-skills" v-model="form.skills" type="text" placeholder="SQL, Python, Looker" />
+      </div>
+      <div class="field">
+        <label for="ingest-groups">groups (comma-separated)</label>
+        <input id="ingest-groups" v-model="form.groups" type="text" placeholder="tableau-users, data-team" />
+      </div>
+    </div>
+    <div class="field">
+      <label for="ingest-notes">notes</label>
+      <input id="ingest-notes" v-model="form.notes" type="text" placeholder="Optional free text" />
+    </div>
+    <button type="submit" class="primary">Ingest &amp; infer</button>
+  </form>
 </template>
