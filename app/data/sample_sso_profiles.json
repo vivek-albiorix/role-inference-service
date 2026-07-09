@@ -1,0 +1,83 @@
+[
+  {
+    "user_id": "usr_001",
+    "display_name": "Sarah Chen",
+    "title": "Sr BI Analyst",
+    "department": "Data & Insights",
+    "manager_title": "Director of Analytics",
+    "groups": ["tableau-users", "data-team", "all-staff"],
+    "skills": ["SQL", "Looker", "Python"],
+    "location": "New York"
+  },
+  {
+    "user_id": "usr_002",
+    "display_name": "David Kim",
+    "title": "Platform Engineer II",
+    "department": "Infrastructure",
+    "manager_title": "VP Engineering",
+    "groups": ["aws-admins", "engineering", "oncall"],
+    "skills": ["Kubernetes", "Node.js", "Terraform"],
+    "location": "Toronto"
+  },
+  {
+    "user_id": "usr_003",
+    "display_name": "Emily Rodriguez",
+    "title": "Customer Outcomes Lead",
+    "department": "Customer Experience",
+    "manager_title": "Head of Customer Success",
+    "groups": ["gainsight-users", "cs-team"],
+    "skills": ["QBRs", "Customer Escalations", "Renewals"],
+    "location": "Chicago"
+  },
+  {
+    "user_id": "usr_004",
+    "display_name": "Michael Patel",
+    "title": "Product Strategy Manager",
+    "department": "Product",
+    "manager_title": "Chief Product Officer",
+    "groups": ["jira-admins", "product-team"],
+    "skills": ["Roadmapping", "User Research", "Prioritization"],
+    "location": "London"
+  },
+  {
+    "user_id": "usr_005",
+    "display_name": "Lisa Thompson",
+    "title": "Revenue Operations Specialist",
+    "department": "Revenue Operations",
+    "manager_title": "Director of Sales Operations",
+    "groups": ["salesforce-admins"],
+    "skills": ["Forecasting", "CRM Analytics", "Pipeline Reporting"],
+    "location": "Austin"
+  },
+  {
+    "user_id": "usr_006",
+    "display_name": "James Wu",
+    "title": "Analyst",
+    "department": "Operations",
+    "manager_title": "Operations Manager",
+    "groups": ["all-staff"],
+    "skills": [],
+    "location": "Singapore",
+    "notes": "Transferred from Sales team 3 months ago"
+  },
+  {
+    "user_id": "usr_007",
+    "display_name": "Priya Nair",
+    "title": "Lead",
+    "department": "Engineering",
+    "manager_title": "CTO",
+    "groups": ["engineering", "all-staff"],
+    "skills": ["Python", "SQL", "Machine Learning"],
+    "location": "Bangalore"
+  },
+  {
+    "user_id": "usr_008",
+    "display_name": "Tom Bergström",
+    "title": null,
+    "department": null,
+    "manager_title": null,
+    "groups": ["contractors"],
+    "skills": [],
+    "location": "Stockholm"
+  }
+]

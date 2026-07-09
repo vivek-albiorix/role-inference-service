@@ -1,0 +1,92 @@
+[
+  {
+    "role_id": "role_001",
+    "role_name": "Senior Data Analyst",
+    "department": "Data",
+    "job_family": "Analytics",
+    "seniority": "Senior",
+    "skills": ["SQL", "Python", "Dashboarding", "Stakeholder Communication"],
+    "keywords": ["analytics", "bi", "reporting", "insights", "tableau", "looker"]
+  },
+  {
+    "role_id": "role_002",
+    "role_name": "Data Analyst",
+    "department": "Data",
+    "job_family": "Analytics",
+    "seniority": "Mid",
+    "skills": ["SQL", "Excel", "Reporting"],
+    "keywords": ["analytics", "reporting", "data", "metrics"]
+  },
+  {
+    "role_id": "role_003",
+    "role_name": "Product Manager",
+    "department": "Product",
+    "job_family": "Product",
+    "seniority": "Mid",
+    "skills": ["Roadmapping", "Stakeholder Management", "Product Discovery"],
+    "keywords": ["product", "roadmap", "customer", "strategy", "discovery"]
+  },
+  {
+    "role_id": "role_004",
+    "role_name": "Senior Product Manager",
+    "department": "Product",
+    "job_family": "Product",
+    "seniority": "Senior",
+    "skills": ["Roadmapping", "Strategy", "Stakeholder Management", "User Research"],
+    "keywords": ["product", "strategy", "roadmap", "prioritization", "discovery"]
+  },
+  {
+    "role_id": "role_005",
+    "role_name": "Software Engineer",
+    "department": "Engineering",
+    "job_family": "Engineering",
+    "seniority": "Mid",
+    "skills": ["TypeScript", "APIs", "Testing"],
+    "keywords": ["backend", "frontend", "platform", "services", "engineering"]
+  },
+  {
+    "role_id": "role_006",
+    "role_name": "Platform Engineer",
+    "department": "Engineering",
+    "job_family": "Infrastructure",
+    "seniority": "Mid",
+    "skills": ["Kubernetes", "Terraform", "AWS", "CI/CD"],
+    "keywords": ["infrastructure", "devops", "platform", "cloud", "kubernetes"]
+  },
+  {
+    "role_id": "role_007",
+    "role_name": "Customer Success Manager",
+    "department": "Customer Success",
+    "job_family": "Customer Success",
+    "seniority": "Mid",
+    "skills": ["Account Management", "Stakeholder Communication", "Escalation Handling"],
+    "keywords": ["customer", "renewal", "adoption", "success", "csm"]
+  },
+  {
+    "role_id": "role_008",
+    "role_name": "Sales Operations Analyst",
+    "department": "Sales",
+    "job_family": "Operations",
+    "seniority": "Mid",
+    "skills": ["CRM", "Forecasting", "Reporting"],
+    "keywords": ["salesforce", "pipeline", "forecast", "quota", "crm"]
+  },
+  {
+    "role_id": "role_009",
+    "role_name": "Revenue Operations Manager",
+    "department": "Revenue Operations",
+    "job_family": "Operations",
+    "seniority": "Senior",
+    "skills": ["CRM Analytics", "Forecasting", "Pipeline Management", "Cross-functional Alignment"],
+    "keywords": ["revops", "revenue", "operations", "salesforce", "pipeline", "forecast"]
+  },
+  {
+    "role_id": "role_010",
+    "role_name": "Engineering Manager",
+    "department": "Engineering",
+    "job_family": "Engineering",
+    "seniority": "Manager",
+    "skills": ["Technical Leadership", "Hiring", "Delivery Management"],
+    "keywords": ["engineering manager", "team lead", "delivery", "people management"]
+  }
+]
