@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.config import settings
+from app.pipeline import llm_disambiguate as llm_disambiguate_module
 from app.pipeline.llm_disambiguate import disambiguate
 from app.pipeline.types import NormalizedProfile, ScoredCandidate, SignalBundle
 
@@ -44,6 +45,18 @@ def _no_api_key_by_default(monkeypatch):
     monkeypatch.setattr(settings, "openai_api_key", None)
 
 
+@pytest.fixture(autouse=True)
+def _clear_llm_cache():
+    """The cache is module-level and keyed only on (shortlist, evidence) --
+    several tests in this file deliberately reuse identical shortlist/profile
+    fixtures to exercise different configurations, which would otherwise
+    collide on the same cache key and silently serve a stale result from an
+    earlier test."""
+    llm_disambiguate_module.clear_cache()
+    yield
+    llm_disambiguate_module.clear_cache()
+
+
 def test_disambiguate_stub_when_no_api_key():
     result = disambiguate(_shortlist(), _profile(), SignalBundle())
     assert result.used is False
@@ -78,7 +91,7 @@ def test_disambiguate_uses_real_client_when_key_present(monkeypatch):
         completions = _Completions()
 
     class _FakeClient:
-        def __init__(self, api_key):
+        def __init__(self, api_key, timeout=None):
             self.chat = _Chat()
 
     import openai
@@ -89,6 +102,78 @@ def test_disambiguate_uses_real_client_when_key_present(monkeypatch):
     assert result.used is True
     assert result.degraded is False
     assert result.chosen_role_id == "role_010"
+
+
+def test_disambiguate_caches_identical_shortlist_and_evidence(monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    call_count = {"n": 0}
+
+    class _Message:
+        content = json.dumps({"chosen_id": "role_010", "rationale": "cache test"})
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+    class _Completions:
+        def create(self, **kwargs):
+            call_count["n"] += 1
+            return _Response()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _FakeClient:
+        def __init__(self, api_key, timeout=None):
+            self.chat = _Chat()
+
+    import openai
+
+    monkeypatch.setattr(openai, "OpenAI", _FakeClient)
+
+    first = disambiguate(_shortlist(), _profile(), SignalBundle())
+    second = disambiguate(_shortlist(), _profile(), SignalBundle())
+
+    assert first.cached is False
+    assert second.cached is True
+    assert second.chosen_role_id == first.chosen_role_id == "role_010"
+    assert call_count["n"] == 1  # the "API" was only actually invoked once
+
+
+def test_disambiguate_cache_misses_on_different_shortlist(monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    class _Message:
+        content = json.dumps({"chosen_id": "role_010", "rationale": "cache test"})
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+    class _Completions:
+        def create(self, **kwargs):
+            return _Response()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _FakeClient:
+        def __init__(self, api_key, timeout=None):
+            self.chat = _Chat()
+
+    import openai
+
+    monkeypatch.setattr(openai, "OpenAI", _FakeClient)
+
+    disambiguate(_shortlist(), _profile(), SignalBundle())
+    different_shortlist = [ScoredCandidate(role_id="role_003", role_name="Product Manager", contributions=[], score=0.4)]
+    result = disambiguate(different_shortlist, _profile(), SignalBundle())
+
+    assert result.cached is False
 
 
 def test_disambiguate_falls_back_to_stub_when_llm_returns_invalid_id(monkeypatch):
@@ -111,7 +196,7 @@ def test_disambiguate_falls_back_to_stub_when_llm_returns_invalid_id(monkeypatch
         completions = _Completions()
 
     class _FakeClient:
-        def __init__(self, api_key):
+        def __init__(self, api_key, timeout=None):
             self.chat = _Chat()
 
     import openai

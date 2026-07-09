@@ -115,12 +115,16 @@ class ScoredCandidate(BaseModel):
 class LLMDisambiguationResult(BaseModel):
     """Output of Stage 5. `used=False` means the deterministic stub ran
     instead of a real model call (no API key, or the call failed/was
-    invalid after retries) -- `degraded` mirrors that for persistence."""
+    invalid after retries) -- `degraded` mirrors that for persistence.
+    `cached=True` means this exact (shortlist, evidence) pair was already
+    resolved by an earlier call -- no new API call (or stub computation)
+    happened this time."""
 
     chosen_role_id: str  # a shortlist role_id, or "none"
     rationale: str
     used: bool
     degraded: bool
+    cached: bool = False
 
 
 class ConfidenceResult(BaseModel):
@@ -182,3 +186,9 @@ class PipelineResult(BaseModel):
     signals: SignalBundle
     llm_used: bool
     llm_degraded: bool
+    llm_cached: bool
+    # Wall-clock milliseconds per stage (only keys for stages that actually
+    # ran -- stage 5 is absent entirely when the margin never triggers it).
+    # Observability, not a performance-critical path: measured with
+    # time.perf_counter() around each stage call in orchestrator.py.
+    stage_timings_ms: dict[str, float]

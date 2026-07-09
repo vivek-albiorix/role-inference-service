@@ -15,6 +15,7 @@ const loading = ref(true)
 const loadError = ref<string | null>(null)
 const showIngest = ref(false)
 const showNewRole = ref(false)
+const reprocessing = ref(false)
 const { showToast } = useToast()
 
 async function loadUsers() {
@@ -45,13 +46,38 @@ async function onRoleCreated() {
   roles.value = await api.getRoles()
 }
 
+// The job runs on the server in a background task (see
+// app/services/reprocess_service.py) -- POST returns immediately, so the
+// only way to know it's done is to poll the status endpoint. At this
+// dataset size it typically finishes within a poll or two; the loop caps
+// out rather than polling forever if something's gone wrong server-side.
+async function pollReprocessStatus() {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const status = await api.getReprocessStatus()
+    if (status.state === 'completed') {
+      showToast(`Reprocessed ${status.processed_count}, skipped ${status.skipped_pinned_count} pinned`)
+      await loadUsers()
+      return
+    }
+    if (status.state === 'failed') {
+      showToast(`Reprocess failed: ${status.error}`, true)
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400))
+  }
+  showToast('Reprocess is taking longer than expected -- check back shortly', true)
+}
+
 async function onReprocessAll() {
+  reprocessing.value = true
   try {
-    const result = await api.reprocessAll()
-    showToast(`Reprocessed ${result.processed_count}, skipped ${result.skipped_pinned_count} pinned`)
-    await loadUsers()
+    await api.startReprocess()
+    showToast('Reprocessing started…')
+    await pollReprocessStatus()
   } catch (err) {
     showToast(err instanceof Error ? err.message : String(err), true)
+  } finally {
+    reprocessing.value = false
   }
 }
 
@@ -70,7 +96,9 @@ onMounted(() => {
     <div class="header-actions">
       <button @click="showIngest = true">Ingest new profile</button>
       <button @click="showNewRole = true">New role</button>
-      <button @click="onReprocessAll">Reprocess all</button>
+      <button :disabled="reprocessing" @click="onReprocessAll">
+        {{ reprocessing ? 'Reprocessing…' : 'Reprocess all' }}
+      </button>
       <a href="/docs" target="_blank" rel="noopener"><button type="button">API docs</button></a>
     </div>
   </header>

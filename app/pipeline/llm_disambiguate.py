@@ -7,6 +7,12 @@ never invent a role, which is the anti-hallucination guardrail: the
 `chosen_id` field is enum-constrained to the shortlist's role_ids plus
 "none". If no API key is configured, or the call fails validation after
 retries, a deterministic stub takes over so the pipeline always completes.
+
+Also holds an in-process cache: the LLM call is a pure function of
+(shortlist, evidence) at temperature=0, so re-running inference for a user
+whose profile and the catalog haven't changed (e.g. clicking "Re-infer"
+twice, or a bulk reprocess that touches the same ambiguous profile) would
+otherwise re-pay a real API call for an answer that can't have changed.
 """
 
 from __future__ import annotations
@@ -18,6 +24,25 @@ from app.config import settings
 from app.pipeline.types import LLMDisambiguationResult, NormalizedProfile, ScoredCandidate, SignalBundle
 
 logger = logging.getLogger(__name__)
+
+# In-process only -- lost on restart, not shared across workers. The real
+# seam for a shared cache (Redis, etc.) at multi-worker scale is this
+# module's public functions; nothing above it needs to change.
+_CACHE: dict[tuple[tuple[str, ...], str], LLMDisambiguationResult] = {}
+_CACHE_MAX_ENTRIES = 512
+
+
+def clear_cache() -> None:
+    """Exposed for tests and ops tooling. Safe to drop entirely at any
+    time -- the next call just recomputes."""
+    _CACHE.clear()
+
+
+def _cache_key(
+    shortlist: list[ScoredCandidate], normalized: NormalizedProfile, signals: SignalBundle
+) -> tuple[tuple[str, ...], str]:
+    role_ids = tuple(sorted(c.role_id for c in shortlist))
+    return (role_ids, _evidence_block(normalized, signals))
 
 _SYSTEM_PROMPT = (
     "You are a role classifier for an enterprise employee directory. Choose EXACTLY ONE "
@@ -80,13 +105,37 @@ def disambiguate(
     if not shortlist:
         return _stub_result([], reason="empty shortlist")
 
+    cache_key = _cache_key(shortlist, normalized, signals)
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached.model_copy(update={"cached": True})
+
+    result = _disambiguate_uncached(shortlist, normalized, signals)
+    if len(_CACHE) >= _CACHE_MAX_ENTRIES:
+        _CACHE.pop(next(iter(_CACHE)))  # simple FIFO eviction; scale never gets close to this at 10 roles
+    _CACHE[cache_key] = result
+    return result
+
+
+def _disambiguate_uncached(
+    shortlist: list[ScoredCandidate],
+    normalized: NormalizedProfile,
+    signals: SignalBundle,
+) -> LLMDisambiguationResult:
     if not settings.openai_api_key:
         return _stub_result(shortlist, reason="no OPENAI_API_KEY configured")
 
     try:
         from openai import OpenAI  # imported lazily so the package is optional at runtime
 
-        client = OpenAI(api_key=settings.openai_api_key)
+        # Explicit per-request timeout: this call runs synchronously inside
+        # POST /profiles and /infer, so an unresponsive OpenAI backend
+        # would otherwise hang the request for however long the SDK's
+        # default timeout is -- observed directly during development as a
+        # ~2-minute stall versus the usual few-second response, with
+        # nothing bounding it. 10s x up to 3 attempts (llm_max_retries=2)
+        # is still slow from an admin's perspective, but bounded.
+        client = OpenAI(api_key=settings.openai_api_key, timeout=10.0)
     except Exception as exc:  # noqa: BLE001 -- any client construction failure falls back to the stub
         return _stub_result(shortlist, reason=f"could not initialize OpenAI client ({exc})")
 

@@ -129,6 +129,8 @@ class InferenceResultOut(BaseModel):
 
     llm_used: bool
     llm_degraded: bool
+    llm_cached: bool
+    stage_timings_ms: dict[str, float]
     engine_version: str
     prompt_version: str
     created_at: dt.datetime
@@ -229,8 +231,20 @@ class ReprocessRequestIn(BaseModel):
     respect_pins: bool = True
 
 
-class ReprocessResultOut(BaseModel):
+class ReprocessStartedOut(BaseModel):
+    """POST /reprocess's immediate response -- the job runs in the
+    background (see services/reprocess_service.py); poll
+    GET /reprocess/status for progress and results."""
+
+    status: Literal["started"]
+
+
+class ReprocessStatusOut(BaseModel):
+    state: Literal["idle", "running", "completed", "failed"]
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
     processed_count: int
     skipped_pinned_count: int
     user_ids_processed: list[str]
     user_ids_skipped: list[str]
+    error: str | None

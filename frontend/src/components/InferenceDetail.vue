@@ -1,7 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { InferenceResultOut } from '../types'
 
-defineProps<{ inference: InferenceResultOut }>()
+const props = defineProps<{ inference: InferenceResultOut }>()
+
+const stageEntries = computed(() =>
+  Object.entries(props.inference.stage_timings_ms).sort(([a], [b]) => a.localeCompare(b)),
+)
+const totalMs = computed(() => stageEntries.value.reduce((sum, [, ms]) => sum + ms, 0))
 </script>
 
 <template>
@@ -36,9 +42,17 @@ defineProps<{ inference: InferenceResultOut }>()
       <li v-if="inference.missing_information.length === 0" class="muted">none</li>
     </ul>
   </div>
+  <div>
+    <h4>Performance (stage timings)</h4>
+    <ul>
+      <li v-for="[stage, ms] in stageEntries" :key="stage">{{ stage }}: {{ ms.toFixed(2) }}ms</li>
+    </ul>
+    <div class="muted">total: {{ totalMs.toFixed(2) }}ms</div>
+  </div>
   <div class="muted run-meta">
     run #{{ inference.run_id }} &middot; engine {{ inference.engine_version }} &middot;
     catalog v{{ inference.catalog_version }} &middot;
-    llm_used={{ inference.llm_used }} &middot; llm_degraded={{ inference.llm_degraded }}
+    llm_used={{ inference.llm_used }} &middot; llm_degraded={{ inference.llm_degraded }} &middot;
+    llm_cached={{ inference.llm_cached }}
   </div>
 </template>

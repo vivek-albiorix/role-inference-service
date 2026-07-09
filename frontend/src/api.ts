@@ -3,7 +3,8 @@ import type {
   OverrideIn,
   OverrideOut,
   ProfileIngestedOut,
-  ReprocessResultOut,
+  ReprocessStartedOut,
+  ReprocessStatusOut,
   RoleIn,
   RoleOut,
   SSOProfileIn,
@@ -60,9 +61,11 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  reprocessAll: () =>
-    request<ReprocessResultOut>('/reprocess', {
+  startReprocess: () =>
+    request<ReprocessStartedOut>('/reprocess', {
       method: 'POST',
       body: JSON.stringify({ scope: 'all', respect_pins: true }),
     }),
+
+  getReprocessStatus: () => request<ReprocessStatusOut>('/reprocess/status'),
 }

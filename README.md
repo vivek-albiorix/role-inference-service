@@ -180,7 +180,7 @@ and RBAC concerns that would drown out the actual assignment focus — see
 |---|---|---|
 | Event bus / message queue for `ProfileUpdated`, `RoleCatalogUpdated` | Direct synchronous function calls | 8 users, 10 roles — a queue adds ops complexity with no throughput benefit yet |
 | Vector DB / embedding search for semantic title matching | Fuzzy string matching (`rapidfuzz`) + a curated keyword/synonym table | Only 10 roles to search; brute-forcing all of them per profile is sub-millisecond |
-| Background workers for bulk reprocessing | `POST /reprocess` runs synchronously in a request | Reprocessing 8 users is instant; the seam (`run_and_persist_inference`) is the same function a queue consumer would call |
+| Real queue + worker pool for bulk reprocessing | `POST /reprocess` runs as a FastAPI `BackgroundTask` (in-memory job tracker, single process) — see the bonus section below | Genuinely non-blocking already; the remaining gap is multi-worker/multi-process coordination, which needs a shared broker (Redis, SQS, etc.), not a bigger in-process data structure |
 | Per-tenant configuration | Global `app/config.py` constants | Single tenant; the settings object is already the seam for making these per-tenant later |
 | RBAC / auth on the API | None | Explicitly out of scope per the assignment ("we do not care about... production deployment") |
 | Calibrated confidence (Platt scaling against labeled outcomes) | Hand-set weights and thresholds, documented and tunable | No labeled dataset to calibrate against yet; see the bonus eval harness in `eval/` for the seam |
@@ -452,7 +452,8 @@ All routes are under `/api`. Interactive docs at `/docs`.
 | `GET /api/roles` | The Work Architecture catalog |
 | `POST /api/roles` | Admin-authored addition to the catalog; `role_id` is server-generated (sequential `role_NNN`, 409 only on a rare concurrent-request collision), not client-supplied; doesn't retroactively touch existing users' mappings |
 | `GET /api/audit` | Org-level audit log (optional `entity_type` filter) |
-| `POST /api/reprocess` | Bulk re-infer all users, respecting pinned overrides by default |
+| `POST /api/reprocess` | Starts a background bulk re-infer job (202, respects pinned overrides by default); returns immediately — see below |
+| `GET /api/reprocess/status` | Poll the current/last background reprocess job's state and results |
 
 Example (matches the assignment's example output shape, extended with
 structured evidence fields):
@@ -511,8 +512,12 @@ curl -s http://127.0.0.1:8000/api/users/usr_001/inference | python3 -m json.tool
   README, not calibrated against a labeled dataset — there isn't one yet.
   See `eval/` for the seam.
 - No authentication on the API or admin page.
-- `POST /reprocess` runs synchronously in the request; fine for 8 users, not
-  for 50,000.
+- `POST /reprocess` now runs as a background task instead of blocking the
+  request (see the bonus section below), but the job tracker is in-memory
+  and single-process — it doesn't survive a restart, isn't shared across
+  workers, and only tracks one job at a time. Fine for a demo; a real
+  multi-worker deployment needs a shared broker (Redis, SQS, etc.), not a
+  bigger in-process dict.
 - The LLM disambiguation stage's *fallback* path has been verified against a
   real OpenAI call (not just mocks): with a configured key, running inference
   for `usr_004` (the sample profile that escalates to stage 5) made 3 real
@@ -524,7 +529,10 @@ curl -s http://127.0.0.1:8000/api/users/usr_001/inference | python3 -m json.tool
   model disambiguation) still hasn't been exercised end-to-end — that needs
   quota on an OpenAI account, not a code change. The real-call parsing/
   validation logic is covered by mocked unit tests in
-  `test_llm_disambiguate.py` either way.
+  `test_llm_disambiguate.py` either way. Separately: one of these runs
+  stalled for ~2 minutes instead of failing fast, which is what prompted
+  adding an explicit `timeout=10.0` to the OpenAI client (previously
+  unbounded) — see the cost/latency bonus section below.
 - The Vue frontend has no automated test suite (no Vitest/Cypress) — it was
   verified once, live, with a scripted Playwright pass through the full
   ingest/override/reset/reprocess flow (see the Frontend section above), not
@@ -537,9 +545,12 @@ curl -s http://127.0.0.1:8000/api/users/usr_001/inference | python3 -m json.tool
    per tenant (Platt scaling against "did the admin agree with the model").
 2. **Embeddings/hybrid search** for candidate generation once the catalog is
    large enough that brute-forcing every role stops being free.
-3. **Event-driven reprocessing** — `ProfileUpdated`/`RoleCatalogUpdated`
-   events on a queue instead of a synchronous bulk endpoint, so a catalog
-   republish doesn't block on request/response.
+3. **Event-driven reprocessing at multi-worker scale** — `POST /reprocess`
+   is already non-blocking (a background task, see the bonus section
+   below), but it's still a manually-triggered, single-process, in-memory
+   job. A real version reacts automatically to `ProfileUpdated`/
+   `RoleCatalogUpdated` events on a shared queue (Redis/SQS) so it works
+   across multiple workers, not just one.
 4. **Multi-tenant config + RBAC** — per-tenant weights/thresholds (the
    `Settings` object is already shaped for this), auth on every route,
    strict tenant isolation at the data layer.
@@ -625,7 +636,143 @@ in dev; whatever's configured via `DATABASE_URL` in a real deployment).
 The baseline migration (`migrations/versions/..._initial_schema.py`) was
 autogenerated against an empty database and verified to reflect all 7 tables
 in `app/models/tables.py` exactly (columns, nullability, foreign keys,
-indexes) with no manual edits needed.
+indexes) with no manual edits needed. A second migration
+(`..._add_llm_cached_and_stage_timings_json_.py`) later added two columns to
+`inference_runs` (see the caching/observability sections below) — autogenerate
+produced `NOT NULL` columns with no server-side default, which fails on
+SQLite as soon as the table has existing rows. Caught by actually testing it
+against a non-empty table (not assumed correct): downgraded, hand-inserted a
+row at the old schema, upgraded again, and confirmed the migration backfills
+`llm_cached=False` / `stage_timings_json={}` via `server_default` rather than
+crashing.
+
+---
+
+## Optional bonus: caching to reduce LLM calls
+
+Stage 5's LLM call is a pure function of `(shortlist, evidence)` at
+`temperature=0` — re-running inference for a user whose profile and the
+catalog haven't changed (clicking "Re-infer" twice, or a bulk reprocess
+touching the same still-ambiguous profile) can't produce a different answer,
+so repeating the API call is pure waste. `pipeline/llm_disambiguate.py` now
+holds an in-process cache keyed on `(sorted shortlist role_ids, evidence
+text)`; a hit returns instantly and marks `cached=true` on the result, which
+is threaded all the way through `PipelineResult` → `InferenceRun` →
+`InferenceResultOut` so it's visible in the API response and the admin UI's
+Details modal, not just an internal implementation detail.
+
+**A real bug the tests caught immediately:** several existing tests in
+`test_llm_disambiguate.py` deliberately reuse identical shortlist/profile
+fixtures to exercise *different* configurations (no key vs. a mocked key vs.
+an invalid LLM response). The very first test run after adding the cache
+failed — a later test was silently served a stale cached result from an
+earlier test, because the cache doesn't know two tests are "different
+situations" if the input tuple is identical. Fixed with an autouse
+`clear_cache()` fixture; the same in-process-cache-needs-a-reset-hook pattern
+was applied again for the reprocess job tracker (below), since it's the same
+class of bug.
+
+**Deliberately not done:** a shared cache (Redis, etc.) for multi-worker
+deployments — in-process is the right scope here (10 roles, one process),
+and `clear_cache()`/the module's two public functions are the seam for
+swapping in a shared backend later without touching any caller.
+
+## Optional bonus: tracing / observability for the inference pipeline
+
+Every stage in `pipeline/orchestrator.py::run_inference()` is timed with
+`time.perf_counter()` and collected into `stage_timings_ms` (stage 8,
+persist + audit, is timed separately in `services/inference_service.py` and
+folded into the same dict) — not a full OpenTelemetry integration, but real,
+per-run, queryable data: every `InferenceRun` stores exactly where its time
+went, and the API/admin UI surface it (a "Performance" section in the
+Details modal lists each stage plus the total). Combined with
+`llm_used`/`llm_degraded`/`llm_cached`, an admin can see — for any past
+decision — whether the LLM ran, whether it was cached, and which stage
+actually cost the time, not just the final answer.
+
+**Deliberately not done:** distributed tracing (spans/trace-ids across
+services) — there's exactly one service here, so a trace would have one
+span per request; genuinely useful once there's a queue/worker to trace
+across.
+
+## Optional bonus: background reprocessing
+
+`POST /reprocess` used to block the request until every user was
+re-inferred. It now starts a FastAPI `BackgroundTask` and returns `202`
+immediately (`services/reprocess_service.py`); `GET /reprocess/status` polls
+for progress and final counts. Only one job runs at a time — a second
+request while one is running gets `409`, checked via a small in-memory
+tracker (`try_start_job()`/`get_status()`), not a queue.
+
+**A real bug the tests caught, not assumed away:** the background task
+originally opened its own DB session via `from app.db import SessionLocal`
+imported at module load time. In production that's correct — but in tests,
+which override the DB dependency for request-scoped code, a background task
+bypasses that override entirely and was silently writing to the **real dev
+database** instead of the test's isolated temp SQLite file. First test run
+after adding this feature showed `processed_count == 8` where `0` or `1` was
+expected — the background job had reprocessed the actual 8 seeded dev users.
+Fixed by looking up `app.db.SessionLocal` via module attribute access at
+call time instead of a bound import, so tests can monkeypatch it the same
+way they already override `get_session` for request-scoped code. The dev
+database's `inference_runs` table had already picked up 16 extra rows from
+the two test runs before this was caught — cleaned up by deleting and
+re-seeding.
+
+The frontend's "Reprocess all" polls `GET /reprocess/status` every 400ms
+(capped at 30 attempts) instead of assuming the job finishes instantly, so
+the same code path is correct whether reprocessing 8 users or 8,000.
+
+**Deliberately not done:** an actual trigger that starts reprocessing when
+the catalog changes. Creating a role via `POST /api/roles` does **not**
+auto-reprocess existing users — that's a deliberate design decision (see the
+role-creation section above: a new role should only affect *future*
+inference, never retroactively rewrite a stored `Mapping` without an admin
+asking for it), not an oversight. "Background reprocessing" here means
+*non-blocking execution*, not *automatic triggering*.
+
+## Optional bonus: cost and latency considerations
+
+Real numbers, not estimates, measured by running the pipeline directly
+against all 8 sample users (see `stage_timings_ms` on any `InferenceRun`):
+
+| | Value |
+|---|---|
+| Deterministic stages (1–4, 6–8), average total | 2.18ms |
+| Deterministic stages, slowest observed (usr_001) | 5.69ms |
+| Deterministic stages, fastest observed (usr_008, empty profile) | 0.10ms |
+| Stage 5 (LLM call), cache miss, stub path | ~0.02ms |
+| Stage 5 (LLM call), cache **hit** | ~0.03ms (dict lookup + evidence rebuild — independent of what the original call cost) |
+| Stage 5 (LLM call), **real** OpenAI network call, observed | 8s (3 fast `429`s) to ~120s (one observed network stall, see Known Limitations) |
+
+The takeaway: the entire deterministic pipeline (7 of 8 stages) runs in
+low-single-digit milliseconds regardless of dataset shape — the only stage
+with real latency variance is the one making a network call, and that
+variance is enormous (8s to 2+ minutes observed) and entirely outside this
+system's control. Caching doesn't reduce that variance for the *first* call,
+but it makes every *subsequent* identical call cost a dict lookup instead of
+re-paying it — which is the actual point, more than dollar cost.
+
+**Cost estimate** (no `tiktoken` dependency added just for this — estimated
+from the actual prompt text at ~4 chars/token, a standard rough heuristic):
+the real system + user prompt for a shortlist of 3 candidates is ~680
+characters (~170 input tokens); the rationale is capped at 400 characters
+(~100 output tokens) plus a short role id. At gpt-4o-mini's current pricing
+($0.15 / $0.60 per million input/output tokens as of mid-2026), that's
+**roughly $0.0001 (0.01¢) per ambiguous profile** — negligible even at
+scale: 1,000 SSO logins/day at the sample data's ~1-in-4 ambiguity rate is
+under $0.03/day. Cost was never the constraint here; latency and
+availability of a third-party API were, which is exactly what the timeout
+fix and the cache both address.
+
+**Also fixed while measuring this:** `pipeline/llm_disambiguate.py`'s
+OpenAI client had no request timeout, so the observed ~2-minute stall (above)
+had nothing bounding it — since this call runs synchronously inside
+`POST /profiles`/`POST /infer`, that's a real request hang, not just a slow
+background job. Added `timeout=10.0` (bounding the worst case across 3
+attempts to ~30s) — still slow, but bounded, and existing mocked tests
+needed their fake client's constructor updated to accept the new keyword
+argument (caught immediately by running the suite, not assumed compatible).
 
 ---
 

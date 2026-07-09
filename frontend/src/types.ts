@@ -76,6 +76,8 @@ export interface InferenceResultOut {
   missing_information: string[]
   llm_used: boolean
   llm_degraded: boolean
+  llm_cached: boolean
+  stage_timings_ms: Record<string, number>
   engine_version: string
   prompt_version: string
   created_at: string
@@ -117,9 +119,19 @@ export interface OverrideOut {
   active: boolean
 }
 
-export interface ReprocessResultOut {
+export interface ReprocessStartedOut {
+  status: 'started'
+}
+
+export type ReprocessJobState = 'idle' | 'running' | 'completed' | 'failed'
+
+export interface ReprocessStatusOut {
+  state: ReprocessJobState
+  started_at: string | null
+  finished_at: string | null
   processed_count: number
   skipped_pinned_count: number
   user_ids_processed: string[]
   user_ids_skipped: string[]
+  error: string | null
 }

@@ -88,6 +88,8 @@ class InferenceRun(Base):
     signals_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     llm_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     llm_degraded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    llm_cached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stage_timings_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     engine_version: Mapped[str] = mapped_column(String, nullable=False)
     prompt_version: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(

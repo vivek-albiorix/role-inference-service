@@ -14,6 +14,15 @@ from app.db import Base, get_session
 from app.main import app
 from app.models.tables import Role
 from app.pipeline.catalog import load_catalog_roles
+from app.services import reprocess_service
+
+
+@pytest.fixture(autouse=True)
+def _reset_reprocess_job_tracker():
+    reprocess_service.reset_for_tests()
+    yield
+    reprocess_service.reset_for_tests()
+
 
 SARAH_PAYLOAD = {
     "user_id": "usr_001",
@@ -43,6 +52,11 @@ def client(tmp_path, monkeypatch):
 
     app.dependency_overrides[get_session] = override_get_session
     monkeypatch.setattr("app.main.init_db", lambda: None)  # avoid touching the dev DB file
+    # reprocess_service's background task opens its own session directly
+    # (it runs outside any request, so FastAPI's dependency-override above
+    # doesn't reach it) -- patch the same underlying factory it looks up,
+    # or bulk reprocess tests would silently write to the real dev DB file.
+    monkeypatch.setattr("app.db.SessionLocal", testing_session_local)
 
     session = testing_session_local()
     for r in load_catalog_roles():
@@ -124,9 +138,18 @@ def test_reprocess_skips_users_with_active_pinned_override(client):
         json={"role_id": "role_002", "pinned": True, "created_by": "admin"},
     )
 
-    result = client.post("/api/reprocess", json={"scope": "all", "respect_pins": True}).json()
-    assert result["processed_count"] == 0
-    assert result["user_ids_skipped"] == ["usr_001"]
+    # POST starts the job as a background task; TestClient runs background
+    # tasks synchronously before returning, so the status endpoint already
+    # reflects the finished job immediately after -- no polling needed here
+    # (unlike a real server, where the client genuinely wouldn't block).
+    start = client.post("/api/reprocess", json={"scope": "all", "respect_pins": True})
+    assert start.status_code == 202
+    assert start.json()["status"] == "started"
+
+    status = client.get("/api/reprocess/status").json()
+    assert status["state"] == "completed"
+    assert status["processed_count"] == 0
+    assert status["user_ids_skipped"] == ["usr_001"]
 
     # Effective role is still the override after reprocess.
     detail = client.get("/api/users/usr_001").json()
@@ -140,8 +163,10 @@ def test_reprocess_still_runs_inference_for_unpinned_override(client):
         json={"role_id": "role_002", "pinned": False, "created_by": "admin"},
     )
 
-    result = client.post("/api/reprocess", json={"scope": "all", "respect_pins": True}).json()
-    assert result["processed_count"] == 1
+    client.post("/api/reprocess", json={"scope": "all", "respect_pins": True})
+    status = client.get("/api/reprocess/status").json()
+    assert status["state"] == "completed"
+    assert status["processed_count"] == 1
 
     # A fresh InferenceRun exists, but the (unpinned, still-active) override
     # still wins the effective role.
@@ -149,6 +174,18 @@ def test_reprocess_still_runs_inference_for_unpinned_override(client):
     assert sum(1 for item in history if item["type"] == "inference") == 2
     detail = client.get("/api/users/usr_001").json()
     assert detail["effective_role"]["role_id"] == "role_002"
+
+
+def test_reprocess_rejects_concurrent_job_with_409(client):
+    # try_start_job() is the exact check the endpoint makes; simulating "a
+    # job is already running" this way is simpler and just as valid as
+    # actually racing two real background tasks, and avoids depending on
+    # thread-timing to make the test deterministic.
+    from app.services import reprocess_service
+
+    assert reprocess_service.try_start_job() is True
+    response = client.post("/api/reprocess", json={"scope": "all"})
+    assert response.status_code == 409
 
 
 def test_override_with_unknown_role_returns_404(client):

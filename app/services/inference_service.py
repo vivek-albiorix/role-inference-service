@@ -9,6 +9,8 @@ it.
 
 from __future__ import annotations
 
+import time
+
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -36,12 +38,17 @@ def run_and_persist_inference(session: Session, user: User, profile: Profile, ac
         signals_json=result.signals.model_dump(mode="json"),
         llm_used=result.llm_used,
         llm_degraded=result.llm_degraded,
+        llm_cached=result.llm_cached,
+        stage_timings_json=result.stage_timings_ms,
         engine_version=settings.engine_version,
         prompt_version=settings.prompt_version,
     )
     session.add(run)
-    session.flush()
 
+    # Stage 8 (persist + audit) timed and folded into the same dict Stage
+    # 1-7 already populated, so the full 8-stage story lives in one place.
+    t0 = time.perf_counter()
+    session.flush()
     _update_mapping(session, user, run)
     write_audit_log(
         session,
@@ -51,6 +58,11 @@ def run_and_persist_inference(session: Session, user: User, profile: Profile, ac
         entity_id=user.external_id,
         after_json={"role_id": run.chosen_role_id, "confidence": run.confidence, "band": run.band},
     )
+    run.stage_timings_json = {
+        **run.stage_timings_json,
+        "8_persist": round((time.perf_counter() - t0) * 1000, 3),
+    }
+    session.flush()
     return run
 
 
@@ -111,6 +123,8 @@ def build_inference_result_out(run: InferenceRun, user_external_id: str) -> Infe
         missing_information=explanation["missing_information"],
         llm_used=run.llm_used,
         llm_degraded=run.llm_degraded,
+        llm_cached=run.llm_cached,
+        stage_timings_ms=run.stage_timings_json,
         engine_version=run.engine_version,
         prompt_version=run.prompt_version,
         created_at=run.created_at,
