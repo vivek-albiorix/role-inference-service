@@ -1,0 +1,42 @@
+[
+  {
+    "user_id": "usr_001",
+    "expected_role_id": "role_001",
+    "note": "Clear: title, department, and seniority all align on Senior Data Analyst."
+  },
+  {
+    "user_id": "usr_002",
+    "expected_role_id": "role_006",
+    "note": "Clear: near-exact title match plus Kubernetes/Terraform skills overlap."
+  },
+  {
+    "user_id": "usr_003",
+    "expected_role_id": "role_007",
+    "note": "Clear despite a non-obvious title -- department/manager/group signals carry it."
+  },
+  {
+    "user_id": "usr_004",
+    "expected_role_id": "role_004",
+    "note": "Likely Senior PM given a CPO-level manager and user-research skill, but genuinely close to Product Manager -- role_003 is an acceptable alternate, not a wrong answer."
+  },
+  {
+    "user_id": "usr_005",
+    "expected_role_id": "role_009",
+    "note": "Clear."
+  },
+  {
+    "user_id": "usr_006",
+    "expected_role_id": null,
+    "note": "Genuinely ambiguous: generic title, vague department, no skills, notes suggest a recent transfer that conflicts with the current department. Correct behavior is to abstain, not force a guess."
+  },
+  {
+    "user_id": "usr_007",
+    "expected_role_id": null,
+    "note": "Genuinely ambiguous between Software Engineer and Engineering Manager -- 'Lead' alone plus ML/SQL skills don't decisively pick one."
+  },
+  {
+    "user_id": "usr_008",
+    "expected_role_id": null,
+    "note": "Empty profile. Correct behavior is to abstain."
+  }
+]
