@@ -42,11 +42,21 @@ pip install -r requirements.txt
 cp .env.example .env               # optional: add OPENAI_API_KEY to enable live LLM disambiguation
 
 python scripts/seed.py             # loads the 10-role catalog + 8 sample users, runs inference for each
+
+cd frontend && npm install && npm run build && cd ..   # builds the Vue admin app into frontend/dist
+
 uvicorn app.main:app --reload
 ```
 
 Then open **http://127.0.0.1:8000/** for the admin page, or
 **http://127.0.0.1:8000/docs** for interactive Swagger API docs.
+
+The frontend build step is optional for API-only work — `pytest` and the API
+itself don't depend on it; FastAPI serves a plain-text "frontend not built
+yet" message at `/` instead of crashing if `frontend/dist` doesn't exist. For
+active frontend development, run `npm run dev` in `frontend/` instead (Vite
+dev server on `:5173` with hot reload, proxying `/api` to the FastAPI backend
+on `:8000` — start both).
 
 No `OPENAI_API_KEY` is required — the LLM disambiguation stage falls back to a
 deterministic stub when no key is configured, so the whole system runs with
@@ -109,13 +119,15 @@ SSO payload (Okta/Entra/Google-shaped)
                           Override (admin, non-destructive) ◄── PATCH/DELETE
                                       │
                                       ▼
-                        Static admin page (list users, view explanation,
+                        Vue 3 admin app (list users, view explanation,
                         override/reset) ── talks only to the REST API
 ```
 
 **Stack:** Python + FastAPI + SQLite (SQLAlchemy for tables, Pydantic for
-API/DTO schemas — kept deliberately separate, see [Data model](#data-model)).
-No frontend framework or build step for the admin page.
+API/DTO schemas — kept deliberately separate, see [Data model](#data-model))
+for the backend; Vue 3 + TypeScript + Vite for the admin app, built to static
+assets and served by FastAPI (single process, single container — see the
+Frontend section below).
 
 **Layers:**
 - `app/pipeline/` — the inference engine. Pure functions, no DB or HTTP
@@ -127,7 +139,8 @@ No frontend framework or build step for the admin page.
 - `app/models/` — `tables.py` (SQLAlchemy ORM) and `schemas.py` (Pydantic
   DTOs), intentionally not the same objects — the wire contract can evolve
   without a migration, and vice versa.
-- `app/static/` — the admin page (vanilla HTML/CSS/JS).
+- `frontend/` — the Vue 3 + TypeScript admin app (Vite build); `frontend/dist`
+  (gitignored, build artifact) is what FastAPI actually serves at `/`.
 
 This is a **single-tenant** build (no `organizations` table, no per-tenant
 config). Multi-tenancy is a real production requirement but adds isolation
@@ -144,6 +157,56 @@ and RBAC concerns that would drown out the actual assignment focus — see
 | Per-tenant configuration | Global `app/config.py` constants | Single tenant; the settings object is already the seam for making these per-tenant later |
 | RBAC / auth on the API | None | Explicitly out of scope per the assignment ("we do not care about... production deployment") |
 | Calibrated confidence (Platt scaling against labeled outcomes) | Hand-set weights and thresholds, documented and tunable | No labeled dataset to calibrate against yet; see the bonus eval harness in `eval/` for the seam |
+
+---
+
+## Frontend (Vue 3 + TypeScript)
+
+The admin app was originally a hand-rolled vanilla HTML/CSS/JS page (no
+build step, matching the assignment's "we don't care about polish"
+guidance). It was replaced with Vue 3 + TypeScript + Vite for one concrete
+reason: reactivity. Ingesting a profile, setting an override, resetting one,
+or bulk-reprocessing all need the user list to reflect the change
+immediately — Vue's reactive state means the table just re-renders when the
+underlying `users` ref changes, instead of manually patching `innerHTML` by
+hand. (The vanilla version actually already avoided a hard page reload via
+`fetch` + DOM patching — see the git history if you want to compare — but
+Vue gets the same result with far less bespoke plumbing, and scales better
+as the admin surface grows.)
+
+**Structure** (`frontend/src/`):
+- `types.ts` — TypeScript interfaces mirroring `app/models/schemas.py`'s
+  Pydantic DTOs by hand (few enough that codegen isn't worth the tooling at
+  this scale) — the same typed-boundary discipline as the backend, now
+  carried through to the browser.
+- `api.ts` — a small typed `fetch` wrapper; one function per endpoint.
+- `composables/useToast.ts` — module-level shared toast state.
+- `components/` — `UserTable` → `UserRow` (one row + its expandable detail/
+  override panel) → `InferenceDetail` (signals/alternatives/evidence) and
+  `OverrideForm`; `IngestForm` and `ToastContainer` at the top level.
+- `App.vue` — owns the `users`/`roles` state and the ingest-panel toggle;
+  every mutating action (ingest, override, reset, re-infer, reprocess)
+  re-fetches `/api/users` on completion and Vue's reactivity handles the
+  re-render — no manual DOM manipulation anywhere in the app.
+
+**Build & serve:** `npm run build` outputs static assets to `frontend/dist`,
+which `app/main.py` mounts at `/` via FastAPI's `StaticFiles` — one process,
+one container, no Node at runtime. The mount is guarded: if `frontend/dist`
+doesn't exist (a fresh clone before the first `npm run build`), FastAPI
+serves a plain-text hint at `/` instead of crashing — the API and `pytest`
+never depend on the frontend being built. For active frontend development,
+`npm run dev` runs the Vite dev server with hot reload, proxying `/api`
+requests to the FastAPI backend (`vite.config.ts`) so there's no CORS
+configuration to maintain.
+
+**Verified live** (not just "it builds"): a headless-browser Playwright
+script drove the running app end to end — loaded the page (8 seeded users),
+expanded usr_006's detail panel and confirmed the real "confidence too low"
+explanation renders, ingested a new profile and confirmed the row appeared
+with **zero page navigation** (tracked via a `beforeunload` listener that
+never fired), set and reset an override on usr_001 and confirmed the
+source badge flipped both ways, and exercised re-infer/reprocess-all — with
+zero browser console errors throughout.
 
 ---
 
@@ -417,6 +480,11 @@ curl -s http://127.0.0.1:8000/api/users/usr_001/inference | python3 -m json.tool
   quota on an OpenAI account, not a code change. The real-call parsing/
   validation logic is covered by mocked unit tests in
   `test_llm_disambiguate.py` either way.
+- The Vue frontend has no automated test suite (no Vitest/Cypress) — it was
+  verified once, live, with a scripted Playwright pass through the full
+  ingest/override/reset/reprocess flow (see the Frontend section above), not
+  via a repeatable, committed test. `vue-tsc` type-checking runs as part of
+  `npm run build`, so at least type errors can't silently ship.
 
 ## What I'd build next
 

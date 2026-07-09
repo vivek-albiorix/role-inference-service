@@ -84,10 +84,6 @@ button:hover {
   background: #f0f1f3;
 }
 
-button.primary:hover {
-  background: var(--accent-hover);
-}
-
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -260,6 +256,11 @@ tr.user-row:hover {
   margin-top: 4px;
 }
 
+.run-meta {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
 .toast {
   position: fixed;
   bottom: 16px;
@@ -278,6 +279,10 @@ tr.user-row:hover {
 .toast.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.toast.error {
+  background: var(--danger);
 }
 
 .empty-state {

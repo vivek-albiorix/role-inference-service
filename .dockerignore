@@ -11,3 +11,9 @@ __pycache__/
 .env
 .DS_Store
 *.egg-info/
+
+# Host-side frontend artifacts -- built fresh inside the Docker image by the
+# frontend-build stage instead (native deps must match the image's platform,
+# not the host's).
+frontend/node_modules/
+frontend/dist/
