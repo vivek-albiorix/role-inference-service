@@ -45,6 +45,10 @@ class ProfileIngestedOut(BaseModel):
     inference_run_id: int
 
 
+class InferRequestIn(BaseModel):
+    user_id: str
+
+
 # --------------------------------------------------------------------------
 # Roles
 # --------------------------------------------------------------------------
