@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { api } from '../api'
 import { useToast } from '../composables/useToast'
 
 const emit = defineEmits<{ ingested: [userId: string] }>()
 const { showToast } = useToast()
+const submitting = ref(false)
 
 const form = reactive({
   user_id: '',
@@ -31,6 +32,7 @@ async function onSubmit() {
     showToast('user_id is required', true)
     return
   }
+  submitting.value = true
   try {
     await api.ingestProfile({
       user_id: userId,
@@ -58,6 +60,8 @@ async function onSubmit() {
     emit('ingested', userId)
   } catch (err) {
     showToast(err instanceof Error ? err.message : String(err), true)
+  } finally {
+    submitting.value = false
   }
 }
 </script>
@@ -113,6 +117,8 @@ async function onSubmit() {
       <label for="ingest-notes">notes</label>
       <input id="ingest-notes" v-model="form.notes" type="text" placeholder="Optional free text" />
     </div>
-    <button type="submit" class="primary">Ingest &amp; infer</button>
+    <button type="submit" class="primary" :disabled="submitting">
+      {{ submitting ? 'Ingesting…' : 'Ingest & infer' }}
+    </button>
   </form>
 </template>
