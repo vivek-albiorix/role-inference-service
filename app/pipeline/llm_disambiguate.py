@@ -85,6 +85,33 @@ def _evidence_block(normalized: NormalizedProfile, signals: SignalBundle) -> str
     return "\n".join(lines) if lines else "(no structured evidence available)"
 
 
+def _summarize_error(exc: Exception) -> str:
+    """The OpenAI SDK's `str(exc)` (and its `.message`) repeats the entire
+    raw HTTP error -- status line plus the full JSON body, e.g.
+    `Error code: 429 - {'error': {'message': '...', 'type': ..., ...}}`.
+    That's not something to show an admin. The actual human-readable
+    message OpenAI sent lives one level down, at `exc.body["message"]` for
+    any API-returned error (rate limits, auth failures, bad requests, ...
+    all share this shape) -- that's what we surface. Falls back to a short
+    category only for errors with no structured body (timeouts, connection
+    failures) or our own validation errors. The full exception is still
+    logged server-side by the caller; this is only for what gets shown."""
+    from openai import APIConnectionError, APIStatusError, APITimeoutError
+
+    if isinstance(exc, APIStatusError):
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict) and body.get("message"):
+            return body["message"]
+        return f"the API returned an error (status {exc.status_code})"
+    if isinstance(exc, APITimeoutError):
+        return "request timed out"
+    if isinstance(exc, APIConnectionError):
+        return "could not connect to the API"
+    if isinstance(exc, ValueError):
+        return str(exc)  # our own validation messages (e.g. bad id) are already clean
+    return "an unexpected error occurred"
+
+
 def _response_schema(shortlist: list[ScoredCandidate]) -> dict:
     return {
         "type": "object",
@@ -137,7 +164,8 @@ def _disambiguate_uncached(
         # is still slow from an admin's perspective, but bounded.
         client = OpenAI(api_key=settings.openai_api_key, timeout=10.0)
     except Exception as exc:  # noqa: BLE001 -- any client construction failure falls back to the stub
-        return _stub_result(shortlist, reason=f"could not initialize OpenAI client ({exc})")
+        logger.warning("Could not initialize OpenAI client: %s", exc)
+        return _stub_result(shortlist, reason=f"could not initialize OpenAI client ({_summarize_error(exc)})")
 
     candidates_desc = "\n".join(f"  {c.role_id} -> {c.role_name}" for c in shortlist)
     user_prompt = (
@@ -173,6 +201,7 @@ def _disambiguate_uncached(
             return LLMDisambiguationResult(chosen_role_id=chosen_id, rationale=rationale, used=True, degraded=False)
         except Exception as exc:  # noqa: BLE001 -- broad on purpose, we always have a fallback
             last_error = exc
-            logger.warning("LLM disambiguation attempt failed: %s", exc)
+            logger.warning("LLM disambiguation attempt failed: %s", exc)  # full detail server-side only
 
-    return _stub_result(shortlist, reason=f"LLM call failed after retries ({last_error})")
+    error_summary = _summarize_error(last_error) if last_error else "unknown error"
+    return _stub_result(shortlist, reason=f"LLM call failed after retries ({error_summary})")

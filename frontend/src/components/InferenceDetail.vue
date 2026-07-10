@@ -49,10 +49,4 @@ const totalMs = computed(() => stageEntries.value.reduce((sum, [, ms]) => sum + 
     </ul>
     <div class="muted">total: {{ totalMs.toFixed(2) }}ms</div>
   </div>
-  <div class="muted run-meta">
-    run #{{ inference.run_id }} &middot; engine {{ inference.engine_version }} &middot;
-    catalog v{{ inference.catalog_version }} &middot;
-    llm_used={{ inference.llm_used }} &middot; llm_degraded={{ inference.llm_degraded }} &middot;
-    llm_cached={{ inference.llm_cached }}
-  </div>
 </template>

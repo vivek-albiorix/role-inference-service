@@ -84,7 +84,7 @@ optional-key behavior as the bare-metal path above.
 > available there) — run `docker compose up --build` once yourself to confirm
 > before depending on it for a demo.
 
-Run the test suite (69 tests, all offline/hermetic):
+Run the test suite (75 tests, all offline/hermetic):
 
 ```bash
 pytest
@@ -629,7 +629,7 @@ is in play, not two configs that can drift apart.
 `Base.metadata.create_all` directly against a per-test throwaway SQLite file,
 bypassing Alembic entirely. Ephemeral test databases have no migration
 history worth managing — building the current schema directly is faster and
-keeps 69 tests hermetic and independent of migration state. Alembic governs
+keeps 75 tests hermetic and independent of migration state. Alembic governs
 the one database that actually persists and evolves over time (`role_inference.db`
 in dev; whatever's configured via `DATABASE_URL` in a real deployment).
 
@@ -781,52 +781,78 @@ argument (caught immediately by running the suite, not assumed compatible).
 This was built end-to-end with **Claude Code** (Sonnet 5), working
 stage-by-stage rather than one large generation pass — deliberately mirroring
 the "don't dump everything into one prompt" principle the pipeline itself is
-built around.
-
-**Workflow:** plan mode first (explore the assignment + an internal
-architecture-notes doc, ask clarifying questions about stack/LLM
-provider/admin-UI shape, write a scoped-down implementation plan), then
-implement commit-by-commit — data model, pipeline stages 1–4, stages 5–8,
-services/API, admin page, seed script, docs — running the real test suite
-and a live server after each stage rather than trusting generated code
-on faith.
+built around. The arc: backend pipeline + data model + API (plan mode first,
+then commit-by-commit) → a vanilla-JS admin page → replaced with Vue 3 +
+TypeScript once real reactivity mattered → Docker/Alembic/Render deployment
+prep → all six optional bonus areas (eval harness, schema migrations,
+LLM-call caching, pipeline observability, background reprocessing,
+cost/latency measurement). Every stage ran the real test suite and, for
+anything user-facing, a live browser — not just "the build succeeded."
 
 **Where it was genuinely helpful:**
 - Scaffolding repetitive-but-precise code (SQLAlchemy tables next to Pydantic
-  DTOs, FastAPI routers, the confidence-formula implementation) correctly on
-  the first pass once the design was pinned down.
+  DTOs, FastAPI routers, Vue components mirroring those same DTOs as
+  TypeScript interfaces) correctly on the first pass once the design was
+  pinned down.
 - Writing the golden-case test suite *after* actually running the pipeline
   against all 8 sample users and observing real output, rather than guessing
-  expected scores up front — this caught the assumption-vs-reality gap
-  early instead of shipping brittle tests.
-- Catching its own bug: while writing the keyword-overlap tests, it noticed
-  role_010's multi-word catalog keywords (`"engineering manager"`) could
-  never match against an alphabetized word set, root-caused it (sorting
-  destroys phrase order), and fixed it with a second natural-order text
-  field — verified by rerunning the full sample-user diagnostic before and
-  after.
-- End-to-end verification: rather than asserting the admin page worked from
-  reading the HTML, it installed Playwright, drove a real headless browser
-  against the live server (list rendering, expanding an explanation,
-  setting and resetting an override), and only then called it done.
+  expected scores up front.
+- Catching its own bugs by testing rather than inspection — see the four
+  concrete examples below, all caught by running something real, not by
+  re-reading the code.
+- End-to-end verification via a real headless browser (Playwright) for
+  every frontend change — the admin page, the Vue rewrite, modals, the
+  meatball menu, background-reprocess polling — rather than trusting
+  `npm run build` succeeding or reading the HTML.
 
-**Where it required correction / was steered:**
-- The first draft of `_stub_result()` in the LLM fallback path would have
-  crashed on an empty shortlist (`shortlist[0]` with no guard) — caught by
-  writing the edge-case test *before* assuming the happy-path code was
-  correct, not caught by the implementation itself.
-- Left several architectural judgment calls to explicit human decisions
-  rather than silently picking one: LLM provider (OpenAI vs. Anthropic vs.
-  none), admin UI shape (static page vs. CLI vs. API-only), and where
-  exactly `pinned` should behaviorally matter in the override/reprocess
-  interaction — these were resolved via clarifying questions before writing
-  code, not guessed.
+**Where it produced bugs / needed correction — kept concrete rather than
+vague, since this is the most honest signal in this section:**
+1. The first draft of `_stub_result()` in the LLM fallback path would have
+   crashed on an empty shortlist (`shortlist[0]` with no guard) — caught by
+   writing the edge-case test *before* assuming the happy path was correct.
+2. Adding an LLM-response cache broke an existing test: several tests in
+   `test_llm_disambiguate.py` deliberately reuse identical shortlist/profile
+   fixtures to exercise *different* configurations (no key vs. mocked key),
+   and the naive cache served a stale result from an earlier test since the
+   input tuple looked identical. Fixed with an autouse `clear_cache()`
+   fixture — the same pattern was needed again for the reprocess job
+   tracker below.
+3. The background-reprocess task opened its own DB session via a bound
+   `from app.db import SessionLocal` import at module load time. In
+   production that's correct; in tests, which override the DB dependency
+   for request-scoped code, a background task bypassed that override
+   entirely and **silently wrote 16 extra rows into the real dev
+   database** before this was caught — the first test run showed
+   `processed_count == 8` where `0` or `1` was expected. Fixed by looking
+   up `app.db.SessionLocal` via module attribute access at call time
+   instead of a bound import.
+4. An autogenerated Alembic migration added two `NOT NULL` columns with no
+   server-side default — passes against an empty dev database, fails
+   against any table with existing rows (a real production scenario, not
+   an edge case). Caught by deliberately testing that scenario: downgraded,
+   hand-inserted a row at the old schema, upgraded again, watched it fail,
+   fixed with `server_default`, reran to confirm the backfill.
+
+Also: left several architectural judgment calls to explicit human decisions
+rather than silently picking one — LLM provider (OpenAI vs. Anthropic vs.
+none), admin UI shape (static page → Vue → modals vs. inline panels), Vue
+language (TypeScript vs. plain JS), `role_id` generation (client-supplied
+vs. server-generated), and where exactly `pinned` should behaviorally
+matter in the override/reprocess interaction — resolved via clarifying
+questions before writing code, not guessed.
 
 **Validation strategy:** every pipeline stage has isolated unit tests; the
 full pipeline is regression-tested against all 8 real sample users with
 band-based (not exact-float) assertions; the API is tested against an
-isolated per-test SQLite database through the full
-ingest→infer→override→reprocess→reset lifecycle; the admin page was driven
-in an actual headless browser, not just read. 69 automated tests, all
-offline. Nothing in this repo is "trust me, the AI wrote it" — every claim
-above is something that was actually run and observed, not assumed.
+isolated per-test SQLite database through the full ingest→infer→override→
+reprocess→reset lifecycle; the Vue admin app was driven in an actual
+headless browser for every feature (ingest, override with a reason, the
+meatball menu, role creation with auto-generated ids, background-reprocess
+polling), not just read as HTML/TypeScript. Cost and latency claims are
+measured numbers from real runs, not estimates — including one live
+demonstration against the actual (quota-exhausted) configured OpenAI key:
+a real network call that took ~8 seconds dropped to 0.04 milliseconds on
+an identical second call, proving the cache. **75 automated tests, all
+offline.** Nothing in this repo is "trust me, the AI wrote it" — every
+claim above, including the bugs, is something that was actually run and
+observed, not assumed.
